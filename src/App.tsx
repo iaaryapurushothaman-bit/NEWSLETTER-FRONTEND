@@ -163,7 +163,7 @@ export default function App() {
     try {
       const htmlContent = getNewsletterHTML();
       const categoryLabel = category === 'Custom...' ? customCategory : category;
-      const emailSubject = `${categoryLabel} Briefing: ${sector} Insights — NewsForge AI`;
+      const emailSubject = `${categoryLabel} Briefing: ${sector} Insights — NewsPulse.AI`;
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -345,7 +345,7 @@ ${item.description}
           ${headlinesHTML}
         </div>
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-family: 'Inter', sans-serif; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
-          <p style="margin: 0 0 4px 0;">Generated automatically by <strong>NewsForge AI</strong></p>
+          <p style="margin: 0 0 4px 0;">Generated automatically by <strong>NewsPulse.AI</strong></p>
           <p style="margin: 0;">Powered by Google Vertex AI Gemini 2.5 & Google Search API</p>
         </div>
       </div>
@@ -422,7 +422,7 @@ ${item.description}
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="text-lg font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-indigo-300">
-                  NewsForge AI
+                  NewsPulse.AI
                 </h1>
                 <span className="text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
                   v2.5
@@ -1004,7 +1004,7 @@ ${item.description}
 
                 {/* Print Footer */}
                 <div className="hidden print:block border-t border-slate-150 mt-12 pt-4 text-center text-[9px] text-slate-400">
-                  <p>NewsForge AI Briefing &bull; Confidential and Proprietary briefing page.</p>
+                  <p>NewsPulse.AI Briefing &bull; Confidential and Proprietary briefing page.</p>
                 </div>
               </div>
             </div>
@@ -1014,7 +1014,7 @@ ${item.description}
 
       {/* Footer */}
       <footer className="border-t border-slate-900 mt-12 py-6 bg-slate-950/40 text-center text-xs text-slate-500 print:hidden">
-        <p>© 2026 NewsForge AI. Corporate newsletter pipeline system.</p>
+        <p>© 2026 NewsPulse.AI. Corporate newsletter pipeline system.</p>
       </footer>
     </div>
   );
