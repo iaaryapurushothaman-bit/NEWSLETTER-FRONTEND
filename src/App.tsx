@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, FileText, Settings, Copy, Check, AlertCircle, RefreshCw, ExternalLink, Globe, Award, Download, Printer, Trash2, Send, Mail } from 'lucide-react';
 import logo from './logo.png';
 
@@ -41,6 +41,16 @@ const COMMON_CATEGORIES = [
 ];
 
 export default function App() {
+  const backgroundCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Revert root theme to dark mode and clean up any light mode remnants
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.add('dark');
+    root.classList.remove('light');
+    localStorage.removeItem('theme');
+  }, []);
+
   // Form fields
   const [sourceMode, setSourceMode] = useState<'search' | 'file'>('search');
   const [sector, setSector] = useState('10xDS CURVE');
@@ -144,6 +154,111 @@ export default function App() {
     };
     loadPersistentState();
   }, []);
+
+  // Subtle glittery background constellation particles
+  useEffect(() => {
+    const canvas = backgroundCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    let particles: Array<{
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      radius: number;
+      color: string;
+      alpha: number;
+    }> = [];
+
+    const colors = ['#8B5CF6', '#A855F7', '#C084FC'];
+
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      initParticles();
+    };
+
+    const initParticles = () => {
+      particles = [];
+      const particleCount = Math.min(180, Math.floor((canvas.width * canvas.height) / 9500));
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 0.48,
+          vy: (Math.random() - 0.5) * 0.48,
+          radius: Math.random() * 1.8 + 1.2,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: Math.random() * 0.3 + 0.25,
+        });
+      }
+    };
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw faint constellation lines
+      ctx.lineWidth = 0.65;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 135) {
+            const opacity = (1 - dist / 135) * 0.16;
+            ctx.strokeStyle = `rgba(168, 85, 247, ${opacity})`;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw glowing particles
+      particles.forEach((p) => {
+        // Soft bloom outer glow
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * 3.8, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha * 0.45;
+        ctx.fill();
+
+        // Inner solid core
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.fill();
+
+        // Slow movement update
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Bounce or wrap
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+      });
+
+      ctx.globalAlpha = 1.0;
+      animationId = requestAnimationFrame(draw);
+    };
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    draw();
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      cancelAnimationFrame(animationId);
+    };
+  }, []);
+
+
 
   const handleSaveEdits = async () => {
     if (!result) return;
@@ -782,8 +897,14 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
       ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500/30 selection:text-indigo-200 relative">
       
+      {/* Subtle background constellation particles */}
+      <canvas 
+        ref={backgroundCanvasRef} 
+        className="fixed inset-0 w-full h-full pointer-events-none z-0" 
+      />
+
       {/* Visual background ambient glows */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-650/10 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute top-1/3 right-1/4 w-[450px] h-[450px] bg-violet-650/10 rounded-full blur-[150px] pointer-events-none"></div>
@@ -822,7 +943,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
+      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
         
         {/* Left Panel: Inputs Form */}
         <div className="w-full lg:w-5/12 space-y-6 print:hidden">
@@ -1306,9 +1427,12 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
 
                 {/* Editorial Columns */}
                 <div className="mb-8">
-                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-3 border-b-2 border-indigo-100 pb-1.5">
+                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-1.5">
                     Editorial Column
                   </h4>
+                  <div className="relative w-full h-[1px] bg-slate-200/85 mb-4 flex items-center">
+                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></div>
+                  </div>
 
                   {/* Editorial Title (if extracted) */}
                   {result.editorial_title !== undefined && (
@@ -1614,9 +1738,12 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
 
                 {/* Curated Headlines List */}
                 <div>
-                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-4 border-b-2 border-indigo-100 pb-1.5">
+                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-2">
                     {sector === '10xDS CURVE' ? 'Current Solutions' : 'Curated Industry Bulletins'}
                   </h4>
+                  <div className="relative w-full h-[1px] bg-slate-200/85 mb-4 flex items-center">
+                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></div>
+                  </div>
                   
                   <div className="space-y-6">
                     {result.news_items.map((item, idx) => (
@@ -1835,7 +1962,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 mt-12 py-6 bg-slate-950/40 text-center text-xs text-slate-500 print:hidden">
+      <footer className="relative z-10 border-t border-slate-900 mt-12 py-6 bg-slate-950/40 text-center text-xs text-slate-500 print:hidden">
         <p>© 2026 10xNewsPulse.AI. Corporate newsletter pipeline system.</p>
       </footer>
 

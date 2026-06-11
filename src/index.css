@@ -66,3 +66,211 @@
   background-size: 200% 100%;
   animation: loading-progress 1.5s infinite linear;
 }
+
+/* ==========================================================================
+   Light Mode Theme CSS Overrides
+   ========================================================================== */
+
+.light {
+  color-scheme: light;
+}
+
+.light body {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+
+/* Page background ambient glow adjustments */
+.light .absolute.bg-indigo-650\/10,
+.light .absolute.bg-violet-650\/10 {
+  background-color: rgba(99, 102, 241, 0.04) !important;
+}
+
+/* Top Header */
+.light header {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light header h1 {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+
+.light header p {
+  color: #64748b !important;
+}
+
+/* Top Header Vertex AI Badge */
+.light header .flex.items-center.text-xs {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+/* Glass panel components */
+.light .glass-panel {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.04), 0 10px 10px -5px rgba(0, 0, 0, 0.01) !important;
+}
+
+.light .glass-panel::after {
+  content: none !important;
+}
+
+/* Form panel top decoration bar opacity */
+.light .glass-panel .absolute.bg-gradient-to-r {
+  background: linear-gradient(95deg, transparent, #8b5cf6, transparent) !important;
+  opacity: 0.4;
+}
+
+/* Labels and Texts in setup form */
+.light label {
+  color: #1e293b !important;
+}
+
+.light input[type="text"],
+.light input[type="number"],
+.light select,
+.light textarea:not(.bg-transparent) {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light .bg-slate-950\/60 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* File upload area in file mode */
+.light .border-dashed {
+  border-color: #cbd5e1 !important;
+  background-color: #f8fafc !important;
+}
+
+.light .border-dashed:hover {
+  border-color: #8b5cf6 !important;
+}
+
+.light .border-dashed .text-slate-400 {
+  color: #475569 !important;
+}
+
+/* Form Buttons */
+.light .glass-panel button:not([type="submit"]):not(.bg-gradient-to-r),
+.light .bg-slate-900\/35 button:not(.bg-gradient-to-r) {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+.light .glass-panel button:not([type="submit"]):not(.bg-gradient-to-r):hover,
+.light .bg-slate-900\/35 button:not(.bg-gradient-to-r):hover {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Exporter Toolbar */
+.light .bg-slate-900\/35 {
+  background-color: rgba(241, 245, 249, 0.6) !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light .text-indigo-400 {
+  color: #4f46e5 !important;
+}
+
+.light .bg-slate-900\/35.border-indigo-500\/20 {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+}
+
+.light .bg-slate-900\/35 input[type="email"] {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Headings in form */
+.light h2 {
+  color: #1e293b !important;
+}
+
+/* Alert dialogs */
+.light .bg-red-950\/40 {
+  background-color: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+/* Warn modal container */
+.light .bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light .bg-slate-900 h3 {
+  color: #0f172a !important;
+}
+
+.light .bg-slate-900 p {
+  color: #334155 !important;
+}
+
+.light .bg-slate-900 .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.light .bg-slate-900 button.bg-slate-800 {
+  background-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+
+.light .bg-slate-900 button.bg-slate-800:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* Skeleton animation overrides */
+.light .skeleton-loading {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%) !important;
+  background-size: 200% 100% !important;
+}
+
+.light .bg-indigo-500\/10 {
+  background-color: #e0e7ff !important;
+  border-color: #c7d2fe !important;
+  color: #3730a3 !important;
+}
+
+/* Spacers and text labels in UI */
+.light .text-slate-400 {
+  color: #1e293b !important;
+}
+.light .text-slate-200 {
+  color: #0f172a !important;
+}
+.light .text-slate-300 {
+  color: #1e293b !important;
+}
+.light .text-slate-500 {
+  color: #475569 !important;
+}
+
+.light footer {
+  border-color: #cbd5e1 !important;
+  background-color: #f1f5f9 !important;
+  color: #64748b !important;
+}
