@@ -767,12 +767,19 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
     }
   };
 
-  const loadingStagesText = [
-    "Contacting Google Search Ingestion service...",
-    "Crawling recent industry updates & Google News index...",
-    "Synthesizing high-impact editorial using Vertex AI (Gemini 2.5 Flash)...",
-    "Polishing structured headlines & preparing premium layouts..."
-  ];
+  const loadingStagesText = sourceMode === 'file'
+    ? [
+        "Reading and parsing uploaded Word document text...",
+        "Extracting structured sections, greetings, and bullet bulletins from file...",
+        "Synthesizing high-impact editorial overview using Vertex AI (Gemini 2.5 Flash)...",
+        "Polishing structured bulletins & preparing final previews..."
+      ]
+    : [
+        "Contacting Google Search Ingestion service...",
+        "Crawling recent industry updates & Google News index...",
+        "Synthesizing high-impact editorial using Vertex AI (Gemini 2.5 Flash)...",
+        "Polishing structured headlines & preparing premium layouts..."
+      ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
