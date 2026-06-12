@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, FileText, Settings, Copy, Check, AlertCircle, RefreshCw, ExternalLink, Globe, Award, Download, Printer, Trash2, Send, Mail } from 'lucide-react';
+import { Search, FileText, Settings, Copy, Check, AlertCircle, RefreshCw, ExternalLink, Globe, Award, Download, Printer, Trash2, Send, Mail, Clock, FolderOpen } from 'lucide-react';
 import logo from './logo.png';
 
 interface NewsItem {
@@ -59,25 +59,65 @@ export default function App() {
   const [clientName, setClientName] = useState('');
   const [clientLogo, setClientLogo] = useState<string | null>(null);
   const [newsCount, setNewsCount] = useState<number>(5);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [briefingId, setBriefingId] = useState<string | null>(null);
+  const [archives, setArchives] = useState<any[]>([]);
+  const [archivesLoading, setArchivesLoading] = useState(false);
+  
+  interface UploadedFileItem {
+    name: string;
+    data: string; // base64 string
+    type: 'docx' | 'pdf';
+  }
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
+
   const [briefingDate, setBriefingDate] = useState(() => {
     const now = new Date();
     return now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
   });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadedFileName(file.name);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const resultStr = reader.result as string;
-        const base64Data = resultStr.split(',')[1];
-        setUploadedFile(base64Data);
-      };
-      reader.readAsDataURL(file);
-    }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    
+    // Read all selected files in parallel
+    const readFilesPromises = fileList.map(file => {
+      return new Promise<UploadedFileItem | null>((resolve) => {
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        if (extension !== 'docx' && extension !== 'pdf') {
+          resolve(null);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const resultStr = reader.result as string;
+          const base64Data = resultStr.split(',')[1];
+          resolve({
+            name: file.name,
+            data: base64Data,
+            type: extension as 'docx' | 'pdf'
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readFilesPromises).then(results => {
+      const validFiles = results.filter((f): f is UploadedFileItem => f !== null);
+      setUploadedFiles(prev => {
+        // Prevent duplicate filenames by filtering them out of previous list
+        const filteredPrev = prev.filter(p => !validFiles.some(v => v.name === p.name));
+        return [...filteredPrev, ...validFiles];
+      });
+      // Clear input so selecting the same file again triggers onChange
+      e.target.value = '';
+    });
+  };
+
+  const removeUploadedFile = (name: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.name !== name));
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,6 +157,76 @@ export default function App() {
   const [emailMock, setEmailMock] = useState(false);
   const [emailError, setEmailError] = useState('');
 
+  const fetchArchiveList = async () => {
+    setArchivesLoading(true);
+    try {
+      const response = await fetch('/api/archive');
+      if (response.ok) {
+        const data = await response.json();
+        setArchives(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch archive list:", err);
+    } finally {
+      setArchivesLoading(false);
+    }
+  };
+
+  const handleLoadArchive = async (id: string) => {
+    try {
+      const response = await fetch(`/api/archive/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.inputs && data.result) {
+          setSector(data.inputs.sector || '10xDS CURVE');
+          setSourceMode(data.inputs.sourceMode || (data.inputs.sector === '10xDS CURVE' || data.inputs.sector === 'Imported Document' ? 'file' : 'search'));
+          if (COMMON_CATEGORIES.includes(data.inputs.category)) {
+            setCategory(data.inputs.category);
+          } else if (data.inputs.customCategory) {
+            setCategory('Custom...');
+            setCustomCategory(data.inputs.customCategory);
+          } else {
+            setCategory(COMMON_CATEGORIES[0]);
+          }
+          setClientName(data.inputs.clientName || '');
+          setClientLogo(data.inputs.clientLogo || null);
+          setNewsCount(data.inputs.newsCount || 5);
+          if (data.inputs.briefingDate) {
+            setBriefingDate(data.inputs.briefingDate);
+          }
+          setResult(data.result);
+          setBriefingId(data.briefingId || data.inputs.briefingId || id);
+          setUploadedFiles([]);
+        }
+      } else {
+        alert("Failed to load archive details.");
+      }
+    } catch (err) {
+      console.error("Failed to load archived briefing:", err);
+    }
+  };
+
+  const handleDeleteArchive = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this archived briefing? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/archive/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        if (briefingId === id) {
+          setBriefingId(null);
+        }
+        fetchArchiveList();
+      } else {
+        alert("Failed to delete archive.");
+      }
+    } catch (err) {
+      console.error("Failed to delete archive:", err);
+    }
+  };
+
   // Load persistent newsletter state on mount
   useEffect(() => {
     const loadPersistentState = async () => {
@@ -126,11 +236,7 @@ export default function App() {
           const data = await response.json();
           if (data.inputs && data.result) {
             setSector(data.inputs.sector || '10xDS CURVE');
-            if (data.inputs.sector === '10xDS CURVE' || data.inputs.sector === 'Imported Document') {
-              setSourceMode('file');
-            } else {
-              setSourceMode('search');
-            }
+            setSourceMode(data.inputs.sourceMode || (data.inputs.sector === '10xDS CURVE' || data.inputs.sector === 'Imported Document' ? 'file' : 'search'));
             if (COMMON_CATEGORIES.includes(data.inputs.category)) {
               setCategory(data.inputs.category);
             } else if (data.inputs.customCategory) {
@@ -146,6 +252,9 @@ export default function App() {
               setBriefingDate(data.inputs.briefingDate);
             }
             setResult(data.result);
+            if (data.briefingId || data.inputs.briefingId) {
+              setBriefingId(data.briefingId || data.inputs.briefingId);
+            }
           }
         }
       } catch (err) {
@@ -153,6 +262,7 @@ export default function App() {
       }
     };
     loadPersistentState();
+    fetchArchiveList();
   }, []);
 
   // Subtle glittery background constellation particles
@@ -278,14 +388,24 @@ export default function App() {
             clientName,
             clientLogo,
             newsCount,
-            briefingDate
+            briefingDate,
+            sourceMode,
+            briefingId
           },
-          result
+          result: {
+            ...result,
+            briefingId
+          }
         })
       });
       if (response.ok) {
+        const data = await response.json();
+        if (data.briefingId) {
+          setBriefingId(data.briefingId);
+        }
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 2500);
+        fetchArchiveList();
       } else {
         console.error("Failed to save newsletter edits.");
       }
@@ -311,9 +431,9 @@ export default function App() {
         setClientName('');
         setClientLogo(null);
         setNewsCount(5);
-        setUploadedFile(null);
-        setUploadedFileName('');
+        setUploadedFiles([]);
         setSourceMode('search');
+        setBriefingId(null);
         setBriefingDate(() => {
           const now = new Date();
           return now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
@@ -658,8 +778,8 @@ export default function App() {
         return;
       }
     } else {
-      if (!uploadedFile) {
-        setError('Please upload a Word document (.docx) first.');
+      if (uploadedFiles.length === 0) {
+        setError('Please upload at least one Word (.docx) or PDF (.pdf) file.');
         return;
       }
     }
@@ -692,7 +812,7 @@ export default function App() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            fileBuffer: uploadedFile,
+            files: uploadedFiles,
             clientName,
             clientLogo,
             newsCount,
@@ -713,7 +833,21 @@ export default function App() {
         const now = new Date();
         setBriefingDate(now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' }));
       }
-      setResult(data);
+
+      const enrichedData = { ...data };
+      if (!enrichedData.wish) {
+        enrichedData.wish = {
+          wish_title: "Holiday Greeting / Festival Wish",
+          wish_content: "Write your custom greeting/wish message here... (Click to edit text, or click delete in the top-right to remove this section)",
+          image_url: null,
+          image_position: "50% 50%"
+        };
+      }
+      setResult(enrichedData);
+      if (enrichedData.briefingId) {
+        setBriefingId(enrichedData.briefingId);
+      }
+      fetchArchiveList();
     } catch (err: any) {
       setError(err.message || 'An unexpected connection error occurred.');
     } finally {
@@ -730,10 +864,14 @@ export default function App() {
       if (clientLogo) md += `![${clientName} Logo](${clientLogo})\n`;
       md += `**${clientName}**\n\n`;
     }
-    md += `*${briefingDate}*\n\n---\n\n## Editorial Overview\n\n`;
-    if (result.editorial_title) md += `### ${result.editorial_title}\n\n`;
-    if (result.editorial_image_url) md += `![Editorial Image](${result.editorial_image_url})\n\n`;
-    md += `_${result.editorial_summary}_\n\n---\n\n`;
+    md += `*${briefingDate}*\n\n---\n\n`;
+
+    if (result.editorial_summary) {
+      md += `## Editorial Overview\n\n`;
+      if (result.editorial_title) md += `### ${result.editorial_title}\n\n`;
+      if (result.editorial_image_url) md += `![Editorial Image](${result.editorial_image_url})\n\n`;
+      md += `_${result.editorial_summary}_\n\n---\n\n`;
+    }
 
     if (result.wish && result.wish.wish_title) {
       md += `## ${result.wish.wish_title}\n\n`;
@@ -790,6 +928,21 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
       </div>
     ` : '';
 
+    const editorialHTML = result.editorial_summary ? `
+          <h3 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #4f46e5;">
+            Editorial Overview
+          </h3>
+          ${result.editorial_title ? `
+            <h4 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: bold; color: #1e293b;">
+              ${result.editorial_title}
+            </h4>
+          ` : ''}
+          ${result.editorial_image_url ? `<img src="${result.editorial_image_url}" alt="Editorial" style="width: 100%; border-radius: 10px; margin-bottom: 16px; object-fit: cover; max-height: 220px; object-position: ${result.editorial_image_position || '50% 50%'};" />` : ''}
+          <p style="margin: 0 0 32px 0; font-family: 'Playfair Display', Georgia, serif; font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-line; font-style: italic; border-left: 3px solid #6366f1; padding-left: 16px;">
+            ${result.editorial_summary}
+          </p>
+    ` : '';
+
     return `
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
         <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 32px; text-align: center; color: #ffffff;">
@@ -808,18 +961,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
           <p style="margin: 16px 0 0 0; font-size: 11px; color: #c7d2fe;">${briefingDate}</p>
         </div>
         <div style="padding: 32px;">
-          <h3 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #4f46e5;">
-            Editorial Overview
-          </h3>
-          ${result.editorial_title ? `
-            <h4 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: bold; color: #1e293b;">
-              ${result.editorial_title}
-            </h4>
-          ` : ''}
-          ${result.editorial_image_url ? `<img src="${result.editorial_image_url}" alt="Editorial" style="width: 100%; border-radius: 10px; margin-bottom: 16px; object-fit: cover; max-height: 220px; object-position: ${result.editorial_image_position || '50% 50%'};" />` : ''}
-          <p style="margin: 0 0 32px 0; font-family: 'Playfair Display', Georgia, serif; font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-line; font-style: italic; border-left: 3px solid #6366f1; padding-left: 16px;">
-            ${result.editorial_summary}
-          </p>
+          ${editorialHTML}
           
           ${wishHTML}
           
@@ -988,35 +1130,58 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 </div>
               </div>
 
-              {/* Word File Upload (File mode) */}
+              {/* File Upload (File mode) */}
               {sourceMode === 'file' && (
-                <div className="space-y-2 animate-in fade-in duration-200">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    Upload Word Document (.docx)
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    Upload Documents (.docx / .pdf)
                   </label>
                   <div className="relative group border-2 border-dashed border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 bg-slate-950/40 text-center transition cursor-pointer">
                     <input
                       type="file"
-                      accept=".docx"
+                      multiple
+                      accept=".docx,.pdf"
                       onChange={handleFileUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      <FileText className={`h-8 w-8 transition ${uploadedFile ? 'text-indigo-400' : 'text-slate-500 group-hover:text-indigo-400'}`} />
-                      {uploadedFileName ? (
-                        <div className="text-xs text-slate-200 font-semibold truncate max-w-full px-2">
-                          {uploadedFileName}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-slate-400 font-medium">
-                          Click to select a <span className="text-indigo-400 font-semibold">.docx</span> file
-                        </div>
-                      )}
+                      <FileText className={`h-8 w-8 transition ${uploadedFiles.length > 0 ? 'text-indigo-400' : 'text-slate-500 group-hover:text-indigo-400'}`} />
+                      <div className="text-xs text-slate-400 font-medium">
+                        Click to select <span className="text-indigo-400 font-semibold">Word or PDF</span> files
+                      </div>
                       <div className="text-[10px] text-slate-500">
-                        Word document up to 10MB
+                        Supports multiple uploads
                       </div>
                     </div>
                   </div>
+
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {uploadedFiles.map((file, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-slate-900/60 border border-slate-850 rounded-lg text-xs">
+                          <div className="flex items-center space-x-2 truncate pr-2">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                              file.type === 'pdf' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            }`}>
+                              {file.type}
+                            </span>
+                            <span className="text-slate-300 font-medium truncate" title={file.name}>
+                              {file.name}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeUploadedFile(file.name)}
+                            className="text-slate-500 hover:text-red-400 p-1 rounded transition"
+                            title="Remove file"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1121,19 +1286,21 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
               )}
 
               {/* News Count */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                  Number of News Articles
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="15"
-                  className="block w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm shadow-inner"
-                  value={newsCount}
-                  onChange={(e) => setNewsCount(parseInt(e.target.value, 10))}
-                />
-              </div>
+              {sourceMode === 'search' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Number of News Articles
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="15"
+                    className="block w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm shadow-inner"
+                    value={newsCount}
+                    onChange={(e) => setNewsCount(parseInt(e.target.value, 10))}
+                  />
+                </div>
+              )}
 
 
 
@@ -1164,6 +1331,103 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 )}
               </button>
             </form>
+          </div>
+
+          {/* Archive & History Panel */}
+          <div className="glass-panel p-6 rounded-2xl shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
+            
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <Clock className="h-5 w-5 text-indigo-400" />
+                <h2 className="text-base font-bold text-slate-200 tracking-wide">Archive &amp; History</h2>
+              </div>
+              <button
+                type="button"
+                onClick={fetchArchiveList}
+                disabled={archivesLoading}
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition disabled:opacity-50"
+                title="Refresh history"
+              >
+                <RefreshCw className={`h-4 w-4 ${archivesLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {archivesLoading && archives.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <RefreshCw className="h-6 w-6 animate-spin text-slate-550 mb-2" />
+                <p className="text-xs text-slate-450">Loading history...</p>
+              </div>
+            ) : archives.length === 0 ? (
+              <div className="text-center py-8 bg-slate-950/40 border border-dashed border-slate-800 rounded-xl">
+                <p className="text-xs text-slate-400">No archived briefings found.</p>
+                <p className="text-[10px] text-slate-500 mt-1 max-w-[200px] mx-auto">
+                  Click &quot;Save Edits&quot; on a generated newsletter to archive it.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                {archives.map((archive) => (
+                  <div
+                    key={archive.id}
+                    className={`p-3 bg-slate-950/40 border rounded-xl flex flex-col justify-between hover:border-indigo-500/30 transition group/item ${
+                      briefingId === archive.id ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-slate-850'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-xs font-bold text-slate-200 truncate" title={archive.sector}>
+                            {archive.sector}
+                          </h3>
+                          {briefingId === archive.id && (
+                            <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded font-bold border border-indigo-500/30 uppercase tracking-wide">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                          Client: <span className="text-slate-350 font-semibold">{archive.clientName || 'General Audience'}</span>
+                        </p>
+                      </div>
+                      <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap ml-2">
+                        {archive.briefingDate || 'No Date'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-900/60 text-[10px]">
+                      <span className="text-slate-500">
+                        {new Date(archive.savedAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => handleLoadArchive(archive.id)}
+                          className="px-2 py-1 bg-slate-900 hover:bg-indigo-650 hover:text-white rounded-lg text-slate-350 transition flex items-center space-x-1 border border-slate-800 cursor-pointer"
+                          title="Load briefing to editor workspace"
+                        >
+                          <FolderOpen className="h-3 w-3 text-indigo-400" />
+                          <span>Load</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteArchive(archive.id)}
+                          className="p-1 hover:bg-red-950/20 hover:text-red-400 rounded-lg text-slate-555 hover:border hover:border-red-500/30 transition border border-transparent cursor-pointer"
+                          title="Delete archived briefing"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1426,13 +1690,14 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 </div>
 
                 {/* Editorial Columns */}
-                <div className="mb-8">
-                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-1.5">
-                    Editorial Column
-                  </h4>
-                  <div className="relative w-full h-[1px] bg-slate-200/85 mb-4 flex items-center">
-                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></div>
-                  </div>
+                {result.editorial_summary && (
+                  <div className="mb-8">
+                    <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-1.5">
+                      Editorial Column
+                    </h4>
+                    <div className="relative w-full h-[1px] bg-slate-200/85 mb-4 flex items-center">
+                      <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></div>
+                    </div>
 
                   {/* Editorial Title (if extracted) */}
                   {result.editorial_title !== undefined && (
@@ -1578,13 +1843,26 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                     onInput={(e) => autoResize(e.currentTarget)}
                     onChange={(e) => { setResult({ ...result, editorial_summary: e.target.value }); autoResize(e.target); }}
                   />
-                </div>
+                  </div>
+                )}
 
                 {/* Wish Section */}
                 {result.wish && result.wish.wish_title && (
-                  <div className="mb-8 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/40 relative">
+                  <div className="mb-8 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/40 relative group/wish-section">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Are you sure you want to delete the holiday greeting / festival wish section?")) {
+                          setResult({ ...result, wish: null });
+                        }
+                      }}
+                      className="absolute top-4 right-4 text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-slate-200/50 transition z-10"
+                      title="Delete greeting section"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                     <textarea
-                      className="auto-resize w-full font-extrabold text-indigo-950 text-lg leading-snug mb-3 bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 py-0.5 rounded"
+                      className="auto-resize w-full font-extrabold text-indigo-950 text-lg leading-snug mb-3 bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 pl-1 pr-10 py-0.5 rounded"
                       rows={1}
                       value={result.wish.wish_title}
                       ref={(el) => autoResize(el)}
@@ -1956,6 +2234,31 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                   <p>10xNewsPulse.AI Briefing &bull; Confidential and Proprietary briefing page.</p>
                 </div>
               </div>
+
+              {!result.wish && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResult({
+                        ...result,
+                        wish: {
+                          wish_title: "Holiday Greeting / Festival Wish",
+                          wish_content: "Write your custom greeting/wish message here... (Click to edit text, or click delete in the top-right to remove this section)",
+                          image_url: null,
+                          image_position: "50% 50%"
+                        }
+                      });
+                    }}
+                    className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 border border-slate-800 rounded-xl text-xs font-bold transition flex items-center space-x-2 shadow-md cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Add Holiday Greeting / Festival Wish Section</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
