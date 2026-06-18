@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, FileText, Settings, Copy, Check, AlertCircle, RefreshCw, ExternalLink, Globe, Award, Download, Printer, Trash2, Send, Mail, Clock, FolderOpen } from 'lucide-react';
+import { Search, FileText, Settings, Copy, Check, AlertCircle, RefreshCw, Globe, Download, Printer, Trash2, Send, Mail, Clock, FolderOpen, Edit } from 'lucide-react';
 import logo from './logo.png';
+import logoCurveImg from './logo_curve.jpg';
+import { LOGO_CURVE_BASE64 } from './logoCurve';
+import { LOGO_BASE64 } from './logoBase64';
+import { FACEBOOK_ICON_BASE64, LINKEDIN_ICON_BASE64, TWITTER_ICON_BASE64, INSTAGRAM_ICON_BASE64, WEBSITE_ICON_BASE64 } from './socialIcons';
 
 interface NewsItem {
   heading: string;
@@ -10,6 +14,8 @@ interface NewsItem {
   source_resource?: string;
   hide_resource?: boolean;
   image_position?: string;
+  hide_url_input?: boolean;
+  button_text?: string;
 }
 
 interface WishSection {
@@ -19,6 +25,15 @@ interface WishSection {
   image_position?: string;
 }
 
+interface BlogItem {
+  heading: string;
+  image_url?: string | null;
+  image_position?: string;
+  is_ai_generated?: boolean;
+  link_url?: string;
+  hide_url_input?: boolean;
+}
+
 interface NewsletterResponse {
   editorial_title?: string;
   editorial_summary: string;
@@ -26,6 +41,8 @@ interface NewsletterResponse {
   editorial_image_position?: string;
   wish?: WishSection | null;
   news_items: NewsItem[];
+  blog_title?: string;
+  blog_items?: BlogItem[];
 }
 
 const COMMON_CATEGORIES = [
@@ -135,6 +152,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [regeneratingImg, setRegeneratingImg] = useState<'editorial' | 'wish' | number | null>(null);
   const [activeRepositioning, setActiveRepositioning] = useState<'editorial' | 'wish' | number | null>(null);
+  const [generatingBlogIdx, setGeneratingBlogIdx] = useState<number | null>(null);
+  const [editingNewsHeading, setEditingNewsHeading] = useState<number | null>(null);
+  const [editingBlogHeading, setEditingBlogHeading] = useState<number | null>(null);
 
   interface UploadWarning {
     title: string;
@@ -148,6 +168,23 @@ export default function App() {
   const [loadingStage, setLoadingStage] = useState(0);
   const [error, setError] = useState('');
   const [result, setResult] = useState<NewsletterResponse | null>(null);
+
+  const DEFAULT_BLOG_ITEMS: BlogItem[] = [
+    { heading: "Leveraging AI and Copilot in Microsoft's Power Platform", image_url: null, image_position: "50% 50%" },
+    { heading: "Automating GRC for better Governance, Risk management and Compliance", image_url: null, image_position: "50% 50%" },
+    { heading: "Adaptive AI: The Art of Learning, Adapting, and Excelling", image_url: null, image_position: "50% 50%" },
+    { heading: "Rising Demand for AI-Driven Intelligent Applications", image_url: null, image_position: "50% 50%" }
+  ];
+
+  const ensureBlogsData = (res: NewsletterResponse | null): NewsletterResponse | null => {
+    if (!res) return null;
+    return {
+      ...res,
+      blog_title: res.blog_title || "From our Blogs",
+      blog_items: res.blog_items && res.blog_items.length === 4 ? res.blog_items : DEFAULT_BLOG_ITEMS
+    };
+  };
+
   const [copiedType, setCopiedType] = useState<'markdown' | 'html' | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -194,7 +231,7 @@ export default function App() {
           if (data.inputs.briefingDate) {
             setBriefingDate(data.inputs.briefingDate);
           }
-          setResult(data.result);
+          setResult(ensureBlogsData(data.result));
           setBriefingId(data.briefingId || data.inputs.briefingId || id);
           setUploadedFiles([]);
         }
@@ -251,7 +288,7 @@ export default function App() {
             if (data.inputs.briefingDate) {
               setBriefingDate(data.inputs.briefingDate);
             }
-            setResult(data.result);
+            setResult(ensureBlogsData(data.result));
             if (data.briefingId || data.inputs.briefingId) {
               setBriefingId(data.briefingId || data.inputs.briefingId);
             }
@@ -546,9 +583,9 @@ export default function App() {
             aspectText = 'landscape (recommended ratio 16:9 or 2:1)';
           }
         } else {
-          if (aspect < 0.95) {
+          if (aspect < 0.9 || aspect > 1.1) {
             isBadAspect = true;
-            aspectText = 'landscape or square (recommended ratio 4:3 or 16:9)';
+            aspectText = 'square (recommended ratio 1:1)';
           }
         }
 
@@ -558,7 +595,8 @@ export default function App() {
             warnings.push(`File size is ${sizeMB}MB (recommended: under 2MB for optimal email rendering).`);
           }
           if (isBadAspect) {
-            warnings.push(`Aspect ratio is close to vertical/square (${width}x${height}px). The container is designed for a ${aspectText} image, so parts of it will be cropped.`);
+            const isSquareReq = aspectText.includes('square');
+            warnings.push(`Aspect ratio is ${isSquareReq ? 'not square' : 'close to vertical/square'} (${width}x${height}px). The container is designed for a ${aspectText} image, so parts of it will be cropped.`);
           }
 
           setUploadWarning({
@@ -575,6 +613,68 @@ export default function App() {
       img.src = dataUrl;
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleBlogImageUpload = (idx: number, file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setResult(prev => {
+        if (!prev || !prev.blog_items) return prev;
+        const newItems = [...prev.blog_items];
+        newItems[idx] = { ...newItems[idx], image_url: dataUrl, is_ai_generated: false };
+        return { ...prev, blog_items: newItems };
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteBlogImage = (idx: number) => {
+    setResult(prev => {
+      if (!prev || !prev.blog_items) return prev;
+      const newItems = [...prev.blog_items];
+      newItems[idx] = { ...newItems[idx], image_url: null, is_ai_generated: false };
+      return { ...prev, blog_items: newItems };
+    });
+  };
+
+  const handleGenerateBlogImage = async (idx: number, heading: string) => {
+    if (!heading.trim()) {
+      alert("Please enter a heading/title for this blog item before generating an image.");
+      return;
+    }
+    setGeneratingBlogIdx(idx);
+    try {
+      const response = await fetch('/api/generate-blog-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ heading }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.image_url) {
+          setResult(prev => {
+            if (!prev || !prev.blog_items) return prev;
+            const newItems = [...prev.blog_items];
+            newItems[idx] = { ...newItems[idx], image_url: data.image_url, is_ai_generated: true };
+            return { ...prev, blog_items: newItems };
+          });
+        } else {
+          alert("Failed to generate blog image: No image data returned.");
+        }
+      } else {
+        const errData = await response.json();
+        alert(`Error generating image: ${errData.error || response.statusText}`);
+      }
+    } catch (err: any) {
+      console.error("Error generating blog image:", err);
+      alert(`Error generating image: ${err.message || err}`);
+    } finally {
+      setGeneratingBlogIdx(null);
+    }
   };
 
   const handleRepositionStart = (
@@ -843,7 +943,7 @@ export default function App() {
           image_position: "50% 50%"
         };
       }
-      setResult(enrichedData);
+      setResult(ensureBlogsData(enrichedData));
       if (enrichedData.briefingId) {
         setBriefingId(enrichedData.briefingId);
       }
@@ -891,89 +991,476 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
     return md + headlinesMD;
   };
 
-  // Generate clean, highly professional HTML template suited for direct pasting into Outlook/Email clients
   const getNewsletterHTML = () => {
     if (!result) return '';
-    const categoryLabel = category === 'Custom...' ? customCategory : category;
 
-    const headlinesHTML = result.news_items.map(item => `
-      <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #f1f5f9; display: flex; gap: 16px;">
-        <div style="flex-shrink: 0; width: 140px; height: 100px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-          ${item.image_url ? `<img src="${item.image_url}" alt="${item.heading.replace(/"/g, '&quot;')}" style="width: 100%; height: 100%; object-fit: cover; object-position: ${item.image_position || '50% 50%'};" />` : `<span style="color: #cbd5e1; font-size: 11px;">Image Processing</span>`}
-        </div>
-        <div style="flex-grow: 1;">
-          <h4 style="margin: 0 0 8px 0; font-family: 'Outfit', sans-serif; font-size: 15px; color: #0f172a; line-height: 1.4;">
-            ${item.heading}
-          </h4>
-          <p style="margin: 0 0 12px 0; font-family: 'Inter', sans-serif; font-size: 13px; color: #475569; line-height: 1.5;">
-            ${item.description}
-          </p>
-          ${item.source_link ? `
-          <a href="${item.source_link}" style="display: inline-block; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; color: #4f46e5; text-decoration: none; border: 1px solid #c7d2fe; padding: 4px 12px; border-radius: 4px;">
-            Read Full Article &rarr;
-          </a>` : ''}
-        </div>
-      </div>
-    `).join('');
-
-    const wishHTML = (result.wish && result.wish.wish_title) ? `
-      <div style="margin-bottom: 32px; padding: 20px; background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px;">
-        <h4 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 16px; color: #4c1d95; font-weight: bold;">
-          ${result.wish.wish_title}
-        </h4>
-        ${result.wish.image_url ? `<img src="${result.wish.image_url}" alt="Greeting" style="width: 100%; border-radius: 10px; margin-bottom: 12px; object-fit: cover; max-height: 200px; object-position: ${result.wish.image_position || '50% 50%'};" />` : ''}
-        <p style="margin: 0; font-family: 'Inter', sans-serif; font-size: 13px; color: #5b21b6; line-height: 1.6; white-space: pre-line;">
-          ${result.wish.wish_content}
-        </p>
-      </div>
-    ` : '';
-
-    const editorialHTML = result.editorial_summary ? `
-          <h3 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #4f46e5;">
-            Editorial Overview
-          </h3>
-          ${result.editorial_title ? `
-            <h4 style="margin: 0 0 12px 0; font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: bold; color: #1e293b;">
-              ${result.editorial_title}
-            </h4>
-          ` : ''}
-          ${result.editorial_image_url ? `<img src="${result.editorial_image_url}" alt="Editorial" style="width: 100%; border-radius: 10px; margin-bottom: 16px; object-fit: cover; max-height: 220px; object-position: ${result.editorial_image_position || '50% 50%'};" />` : ''}
-          <p style="margin: 0 0 32px 0; font-family: 'Playfair Display', Georgia, serif; font-size: 15px; color: #334155; line-height: 1.7; white-space: pre-line; font-style: italic; border-left: 3px solid #6366f1; padding-left: 16px;">
-            ${result.editorial_summary}
-          </p>
-    ` : '';
-
-    return `
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-        <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 32px; text-align: center; color: #ffffff;">
-          <p style="margin: 0 0 8px 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; color: #a5b4fc;">
-            ${categoryLabel.toUpperCase()} BRIEFING
-          </p>
-          <h1 style="margin: 0 0 8px 0; font-family: 'Outfit', sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -0.02em;">
-            ${sector.toUpperCase()}
-          </h1>
-          ${clientName ? `
-            <div style="margin-top: 16px;">
-              ${clientLogo ? `<div style="background: white; display: inline-block; padding: 8px; border-radius: 8px;"><img src="${clientLogo}" alt="${clientName}" style="height: 40px; object-fit: contain;" /></div>` : ''}
-              <p style="margin: 8px 0 0 0; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #e0e7ff;">${clientName}</p>
+    const renderBlogItemImage = (idx: number) => {
+      if (!result.blog_items || !result.blog_items[idx]) return '';
+      const item = result.blog_items[idx];
+      if (!item.image_url) {
+        return `<div style="background-color: #e2e8f0; width: 270px; height: 202px; border-radius: 8px; border: 2.5px solid #000000; line-height: 202px; text-align: center; color: #64748b; font-family: Arial; font-size: 10pt;">No Image</div>`;
+      }
+      
+      const imgHtml = `
+        <div style="position: relative; width: 270px; height: 202px; border-radius: 8px; border: 2.5px solid #000000; overflow: hidden; display: block;">
+          <img src="${item.image_url}" alt="Blog ${idx + 1}" width="270" height="202" style="display: block; width: 270px; height: 202px; border-radius: 8px; object-fit: cover; border: 0;" />
+          ${item.is_ai_generated ? `
+            <div style="position: absolute; bottom: 18px; right: 18px; background-color: #ffffff; padding: 4px 8px; border-radius: 0px; border: 0; line-height: 0; font-size: 0;">
+              <img src="${LOGO_BASE64}" alt="10xDS Logo" height="15" style="display: inline-block; height: 15px; width: auto; border: 0; vertical-align: middle;" />
             </div>
           ` : ''}
-          <p style="margin: 16px 0 0 0; font-size: 11px; color: #c7d2fe;">${briefingDate}</p>
         </div>
-        <div style="padding: 32px;">
-          ${editorialHTML}
-          
-          ${wishHTML}
-          
-          <h3 style="margin: 0 0 16px 0; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #4f46e5;">
-            ${sector === '10xDS CURVE' ? 'Current Solutions' : 'Top Industry Briefs'}
-          </h3>
-          ${headlinesHTML}
-        </div>
-        <div style="background-color: #f8fafc; padding: 20px; text-align: center; font-family: 'Inter', sans-serif; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9;">
-          <p style="margin: 0 0 4px 0;">Generated automatically by <strong>10xNewsPulse.AI</strong></p>
-          <p style="margin: 0;">Powered by Google Vertex AI Gemini 2.5</p>
-        </div>
+      `;
+
+      const absoluteUrl = ensureAbsoluteUrl(item.link_url);
+      if (absoluteUrl) {
+        return `<a href="${absoluteUrl}" target="_blank" style="text-decoration: none; display: block;">${imgHtml}</a>`;
+      }
+      return imgHtml;
+    };
+
+    const renderBlogItemHeading = (idx: number) => {
+      if (!result.blog_items || !result.blog_items[idx]) return '';
+      const item = result.blog_items[idx];
+      const fontHtml = `
+        <font color="#6e3c95" style="font-size: 11pt; font-weight: bold; font-family: Arial, sans-serif; line-height: 15pt; text-decoration: none;">
+          ${item.heading}
+        </font>
+      `;
+
+      const absoluteUrl = ensureAbsoluteUrl(item.link_url);
+      if (absoluteUrl) {
+        return `<a href="${absoluteUrl}" target="_blank" style="text-decoration: none; color: #6e3c95;">${fontHtml}</a>`;
+      }
+      return fontHtml;
+    };
+
+    const editorialHTML = result.editorial_summary ? `
+      <!-- Editorial Overview -->
+      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td class="paddingcomp" style="padding: 20px 15px 10px 15px; border-collapse: collapse; text-align: left;">
+              <font color="#6e3c95" style="font-family: Arial, Helvetica, sans-serif; font-size: 16pt;">
+                <b>${result.editorial_title || 'Editorial Overview'}</b>
+              </font>
+            </td>
+          </tr>
+          <tr>
+            <td class="paddingcomp" style="padding: 10px 15px 15px 15px; border-collapse: collapse;">
+              <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    ${result.editorial_image_url ? `
+                    <td style="padding-right: 15px; width: 180px; vertical-align: top; text-align: left;">
+                      <img src="${result.editorial_image_url}" alt="Editorial" style="width: 180px; height: auto; border-radius: 8px; display: block;" />
+                    </td>
+                    ` : ''}
+                    <td style="vertical-align: top; text-align: left; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 16pt; color: #334155; font-style: italic; border-left: 3px solid #6e3c95; padding-left: 15px;">
+                      ${result.editorial_summary}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 15px;">
+              <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    <td style="border-top: 2px solid #d9d9d9; font-size: 0px; height: 0px; width: 100%;">&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    ` : '';
+
+    const wishHTML = (result.wish && result.wish.wish_title) ? `
+      <!-- Wish Greeting Section -->
+      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td class="paddingcomp" style="padding: 15px; border-collapse: collapse;">
+              <table cellpadding="0" cellspacing="0" style="width: 100%; background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    <td style="padding: 20px; text-align: left;">
+                      <h4 style="margin: 0 0 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 14pt; color: #4c1d95; font-weight: bold;">
+                        ${result.wish.wish_title}
+                      </h4>
+                      ${result.wish.image_url ? `
+                      <table cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 12px; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td align="left">
+                              <img src="${result.wish.image_url}" alt="Greeting" style="width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; display: block;" />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      ` : ''}
+                      <p style="margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #5b21b6; line-height: 16pt; white-space: pre-line;">
+                        ${result.wish.wish_content}
+                      </p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 15px;">
+              <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    <td style="border-top: 2px solid #d9d9d9; font-size: 0px; height: 0px; width: 100%;">&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    ` : '';    const headlinesHTML = result.news_items.map((item, idx) => {
+      const absoluteUrl = ensureAbsoluteUrl(item.source_link);
+      return `
+      <!-- News Item ${idx + 1} Headline -->
+      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td class="paddingcomp" style="padding: 15px 15px 5px 15px; border-collapse: collapse; text-align: left;">
+              <font color="#6e3c95" style="font-family: Arial, Helvetica, sans-serif; font-size: 18pt; line-height: 22pt;">
+                <b>
+                  ${absoluteUrl ? `
+                  <a href="${absoluteUrl}" style="text-decoration: none; color: #6e3c95;" target="_blank">
+                    ${item.heading}
+                  </a>
+                  ` : item.heading}
+                </b>
+              </font>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- News Item ${idx + 1} Columns -->
+      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td class="paddingcomp" style="padding: 5px 15px 15px 15px; border-collapse: collapse;">
+              <table cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    ${item.image_url ? `
+                    <td style="width: 190px; vertical-align: top; padding-right: 15px; text-align: left;">
+                      <img src="${item.image_url}" alt="News Image" width="180" height="180" style="width: 180px; height: 180px; object-fit: cover; display: block;" />
+                    </td>
+                    ` : ''}
+                    <td style="vertical-align: top; text-align: left; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 16.5pt; color: #334155;">
+                      <p style="margin: 0 0 15px 0; line-height: 16.5pt;">
+                        ${item.description}
+                      </p>
+                      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td style="vertical-align: middle; text-align: left;">
+                              <table align="left" cellpadding="0" cellspacing="0" style="border:none;padding:0px;margin:0px;border-collapse:separate;">
+                                <tbody>
+                                  <tr>
+                                    <td align="left" style="border-collapse:collapse;border:0px;padding:0px;color:#ffffff;font-family:Arial;text-align:left;border-radius:13px;cursor:pointer;">
+                                      <a align="center" href="${absoluteUrl || 'https://10xds.com'}" style="padding:0px 0px;background-color:#6e3c95;width:156px;height:40px;font-size:12pt;direction:ltr;font-family:Arial;color:#ffffff;cursor:pointer;text-decoration:none;border-radius:13px;border:0px solid #ffffff;border-collapse:separate;display:table;text-align:center;" target="_blank">
+                                        <font style="color:#ffffff;display:table-cell;vertical-align:middle;">
+                                          \${item.button_text || 'Visit Webpage'}
+                                        </font>
+                                      </a>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </td>
+                            <td style="vertical-align: middle; text-align: right; padding-right: 15px;">
+                              <table align="right" cellpadding="0" cellspacing="0" style="border-collapse: collapse; display: inline-table;">
+                                <tbody>
+                                  <tr>
+                                    <td align="center" style="padding: 0 10px; text-align: center; vertical-align: middle;">
+                                      <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(absoluteUrl || 'https://10xds.com')}" target="_blank" style="text-decoration: none; display: block;">
+                                        <img src="${FACEBOOK_ICON_BASE64}" alt="Facebook" width="32" height="32" style="width: 32px; height: 32px; display: block; border-radius: 50%; border: 0;" />
+                                        <font color="#2d68c4" style="font-size: 8pt; font-weight: bold; text-decoration: none; font-family: Arial, sans-serif; line-height: 14px; margin-top: 4px; display: block;">Facebook</font>
+                                      </a>
+                                    </td>
+                                    <td align="center" style="padding: 0 10px; text-align: center; vertical-align: middle;">
+                                      <a href="https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(absoluteUrl || 'https://10xds.com')}" target="_blank" style="text-decoration: none; display: block;">
+                                        <img src="${LINKEDIN_ICON_BASE64}" alt="LinkedIn" width="32" height="32" style="width: 32px; height: 32px; display: block; border-radius: 50%; border: 0;" />
+                                        <font color="#2d68c4" style="font-size: 8pt; font-weight: bold; text-decoration: none; font-family: Arial, sans-serif; line-height: 14px; margin-top: 4px; display: block;">LinkedIn</font>
+                                      </a>
+                                    </td>
+                                    <td align="center" style="padding: 0 10px; text-align: center; vertical-align: middle;">
+                                      <a href="https://twitter.com/intent/tweet?url=${encodeURIComponent(absoluteUrl || 'https://10xds.com')}&text=${encodeURIComponent(item.heading)}" target="_blank" style="text-decoration: none; display: block;">
+                                        <img src="${TWITTER_ICON_BASE64}" alt="Twitter" width="32" height="32" style="width: 32px; height: 32px; display: block; border-radius: 50%; border: 0;" />
+                                        <font color="#2d68c4" style="font-size: 8pt; font-weight: bold; text-decoration: none; font-family: Arial, sans-serif; line-height: 14px; margin-top: 4px; display: block;">Twitter</font>
+                                      </a>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Divider (Only if not the last item) -->
+      ${idx < result.news_items.length - 1 ? `
+      <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td style="padding: 15px 15px;">
+              <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    <td style="border-top: 2px solid #d9d9d9; font-size: 0px; height: 0px; width: 100%;">&nbsp;</td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      ` : ''}
+    `;
+    }).join('');
+
+    const blogPostsHTML = result.blog_items ? `
+      <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 30px; border-top: 2px solid #6e3c95;">
+        <tbody>
+          <tr>
+            <td align="center" style="padding: 25px 0 15px 0;">
+              <font color="#6e3c95" style="font-size: 16pt; font-weight: bold; font-family: Arial, sans-serif; text-transform: uppercase;">
+                ${result.blog_title || 'From our Blogs'}
+              </font>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 15px;">
+              <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  <!-- Row 1: Blog Item 1 and 2 -->
+                  <tr>
+                    <!-- Blog Item 1 -->
+                    <td valign="top" style="width: 270px; padding-bottom: 25px;">
+                      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td style="padding: 0; text-align: center;">
+                              ${renderBlogItemImage(0)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0 0 0; text-align: center;">
+                              ${renderBlogItemHeading(0)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                    
+                    <td style="width: 20px;">&nbsp;</td>
+                    
+                    <!-- Blog Item 2 -->
+                    <td valign="top" style="width: 270px; padding-bottom: 25px;">
+                      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td style="padding: 0; text-align: center;">
+                              ${renderBlogItemImage(1)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0 0 0; text-align: center;">
+                              ${renderBlogItemHeading(1)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                  
+                  <!-- Row 2: Blog Item 3 and 4 -->
+                  <tr>
+                    <!-- Blog Item 3 -->
+                    <td valign="top" style="width: 270px;">
+                      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td style="padding: 0; text-align: center;">
+                              ${renderBlogItemImage(2)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0 0 0; text-align: center;">
+                              ${renderBlogItemHeading(2)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                    
+                    <td style="width: 20px;">&nbsp;</td>
+                    
+                    <!-- Blog Item 4 -->
+                    <td valign="top" style="width: 270px;">
+                      <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+                        <tbody>
+                          <tr>
+                            <td style="padding: 0; text-align: center;">
+                              ${renderBlogItemImage(3)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 10px 0 0 0; text-align: center;">
+                              ${renderBlogItemHeading(3)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    ` : '';
+
+    const socialFooterHTML = `
+      <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 30px; border-top: 3px solid #6e3c95; background-color: #ffffff;">
+        <tbody>
+          <tr>
+            <td align="center" style="padding: 20px 0 10px 0;">
+              <font color="#6e3c95" style="font-size: 11pt; font-weight: bold; font-family: Arial, sans-serif; text-transform: uppercase; letter-spacing: 1px;">
+                Follow for More Updates
+              </font>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 5px 0 20px 0;">
+              <table align="center" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+                <tbody>
+                  <tr>
+                    <td align="center" style="padding: 0 12px;">
+                      <a href="https://10xds.com" target="_blank" style="text-decoration: none;">
+                        <img src="${WEBSITE_ICON_BASE64}" alt="Website" width="36" height="36" style="width: 36px; height: 36px; display: block; border-radius: 50%; border: 0;" />
+                        <font color="#6e3c95" style="font-size: 7.5pt; font-weight: bold; font-family: Arial, sans-serif; display: block; margin-top: 4px;">Website</font>
+                      </a>
+                    </td>
+                    
+                    <td align="center" style="padding: 0 12px;">
+                      <a href="https://www.facebook.com/10xDS/" target="_blank" style="text-decoration: none;">
+                        <img src="${FACEBOOK_ICON_BASE64}" alt="Facebook" width="36" height="36" style="width: 36px; height: 36px; display: block; border-radius: 50%; border: 0;" />
+                        <font color="#6e3c95" style="font-size: 7.5pt; font-weight: bold; font-family: Arial, sans-serif; display: block; margin-top: 4px;">Facebook</font>
+                      </a>
+                    </td>
+
+                    <td align="center" style="padding: 0 12px;">
+                      <a href="https://www.linkedin.com/company/exponential-digital-solutions" target="_blank" style="text-decoration: none;">
+                        <img src="${LINKEDIN_ICON_BASE64}" alt="LinkedIn" width="36" height="36" style="width: 36px; height: 36px; display: block; border-radius: 50%; border: 0;" />
+                        <font color="#6e3c95" style="font-size: 7.5pt; font-weight: bold; font-family: Arial, sans-serif; display: block; margin-top: 4px;">LinkedIn</font>
+                      </a>
+                    </td>
+
+                    <td align="center" style="padding: 0 12px;">
+                      <a href="https://www.instagram.com/10xds/" target="_blank" style="text-decoration: none;">
+                        <img src="${INSTAGRAM_ICON_BASE64}" alt="Instagram" width="36" height="36" style="width: 36px; height: 36px; display: block; border-radius: 50%; border: 0;" />
+                        <font color="#6e3c95" style="font-size: 7.5pt; font-weight: bold; font-family: Arial, sans-serif; display: block; margin-top: 4px;">Instagram</font>
+                      </a>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 10px 0 25px 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #4b5563; line-height: 14pt; border-top: 1px solid #f3f4f6;">
+              <strong style="color: #1f2937;">Exponential Digital Solutions (10xDS)</strong><br />
+              India | Bahrain | UAE
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+
+    return `
+      <div class="zppage-container">
+        <table bgcolor="#f0f0f0" border="0" cellpadding="0" cellspacing="0" class="contentOuter" id="contentOuter" style="background-color:#f0f0f0; mso-table-lspace:0pt; mso-table-rspace:0pt;font-size:12px;text-align:center;border:0px;padding:0px;border-collapse:collapse; width: 100%;" width="100%">
+          <tbody>
+            <tr>
+              <td style="font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;border-collapse:collapse;">&nbsp;</td>
+              <td align="center" style="font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;border-collapse:collapse; width: 600px;">
+                <table bgcolor="#ffffff" border="0" cellpadding="0" cellspacing="0" class="contentInner" id="contentInner" style="border-collapse:collapse; border:0px;font-size:12px;width:600px;margin:0px auto;background-color:#ffffff; text-align: left;" width="600">
+                  <tbody>
+                    <tr>
+                      <td style="border-collapse:collapse; font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;" valign="top">
+                        
+                        <table border="0" cellpadding="0" cellspacing="0" class="zpAlignPos" style="font-size:12px;padding:0px;border:0px;border-collapse:collapse; width: 100%;" width="100%">
+                          <tbody>
+                            <tr>
+                              <td class="paddingcomp" style="border-collapse:collapse;border:0px;padding:15px;font-size:12pt;font-family:Arial,Helvetica;line-height:19pt;border-bottom:6px solid #6e3c95;">
+                                <table align="center" style="border:0px;border-collapse:collapse;font-size:12px;text-align: left; width: 100%; margin: 0px auto;">
+                                  <tbody>
+                                    <tr>
+                                      <td style="border-collapse:collapse;font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;text-align: left; width: 100%;" width="100%">
+                                        <img alt="Logo" height="160" src="${clientLogo || LOGO_CURVE_BASE64}" style="vertical-align: middle; height: 160px; width: auto; max-width: 380px;" valign="middle">
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        ${editorialHTML}
+
+                        ${wishHTML}
+
+                        ${headlinesHTML}
+
+                        ${blogPostsHTML}
+
+                        ${socialFooterHTML}
+
+                        <table bgcolor="#f8fafc" border="0" cellpadding="0" cellspacing="0" style="width: 100%; background-color: #f8fafc; border-top: 1px solid #e2e8f0; border-collapse: collapse;">
+                          <tbody>
+                            <tr>
+                              <td style="padding: 20px; text-align: center; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #94a3b8; line-height: 14pt;">
+                                <p style="margin: 0 0 4px 0;">Generated automatically by <strong>10xNewsPulse.AI</strong></p>
+                                <p style="margin: 0;">Powered by Google Vertex AI Gemini 2.5</p>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+              <td style="font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;border-collapse:collapse;">&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     `;
   };
@@ -1016,9 +1503,20 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
     window.print();
   };
 
+  const ensureAbsoluteUrl = (url: string | undefined): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (/^(f|ht)tps?:\/\//i.test(trimmed) || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:') || trimmed.startsWith('/') || trimmed.startsWith('#')) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  };
+
   const extractDomain = (url: string) => {
     try {
-      return new URL(url).hostname.replace('www.', '');
+      const absUrl = ensureAbsoluteUrl(url);
+      return new URL(absUrl).hostname.replace('www.', '');
     } catch {
       return 'Source';
     }
@@ -1068,9 +1566,6 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 <h1 className="text-lg font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-indigo-300">
                   10xNewsPulse.AI
                 </h1>
-                <span className="text-[9px] bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
-                  v2.5
-                </span>
               </div>
               <p className="text-[10px] text-slate-400 tracking-wider uppercase font-semibold">
                 Enterprise Briefing automation
@@ -1185,28 +1680,44 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 </div>
               )}
 
-              {/* Sector Input (Search mode) */}
-              {sourceMode === 'search' && (
-                <div className="animate-in fade-in duration-200 space-y-5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                      Target Sector / Topic
-                    </label>
-                    <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                        <Search className="h-4.5 w-4.5" />
-                      </span>
-                      <input
-                        type="text"
-                        required={sourceMode === 'search'}
-                        placeholder="e.g. Generative AI, Cyberdefense, CleanTech"
-                        className="block w-full pl-11 pr-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm shadow-inner"
-                        value={sector}
-                        onChange={(e) => setSector(e.target.value)}
-                      />
-                    </div>
-                  </div>
+              {/* Target Sector / Topic (Always visible) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  Target Sector / Topic
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Search className="h-4.5 w-4.5" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Generative AI, Cyberdefense, CleanTech"
+                    className="block w-full pl-11 pr-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm shadow-inner"
+                    value={sector}
+                    onChange={(e) => setSector(e.target.value)}
+                  />
+                </div>
+              </div>
 
+              {/* Briefing Date (Always visible) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  Briefing Date
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. June 2026"
+                  className="block w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm shadow-inner"
+                  value={briefingDate}
+                  onChange={(e) => setBriefingDate(e.target.value)}
+                />
+              </div>
+
+              {/* Category Options (Search mode only) */}
+              {sourceMode === 'search' && (
+                <div className="animate-in fade-in duration-205 space-y-5">
                   {/* Category Select */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">
@@ -1639,53 +2150,16 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
               {/* Newsletter Preview (Styled like premium newsletter paper sheet) */}
               <div className="bg-white text-slate-900 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col border border-slate-100 relative overflow-hidden print:shadow-none print:p-0 print:border-none">
                 
-                {/* Visual Header Banner */}
-                <div className="bg-gradient-to-r from-indigo-900 to-violet-950 -mx-6 sm:-mx-8 -mt-6 sm:-mt-8 p-6 sm:p-8 text-center text-white mb-8 border-b-4 border-indigo-500">
-                  <div className="flex justify-center items-center space-x-2.5 mb-2.5">
-                    <Award className="h-5 w-5 text-indigo-300" />
-                    <input
-                      type="text"
-                      className="bg-transparent text-[10px] font-extrabold tracking-widest uppercase text-indigo-300 text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 border-none w-64 px-1 py-0.5 rounded cursor-pointer hover:bg-white/10"
-                      value={category === 'Custom...' ? customCategory : category}
-                      onChange={(e) => {
-                        setCategory('Custom...');
-                        setCustomCategory(e.target.value);
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-center">
-                    <textarea
-                      rows={1}
-                      className="auto-resize bg-transparent text-2xl sm:text-3xl font-extrabold tracking-tight text-white text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 border-none w-full uppercase resize-none overflow-hidden px-1 py-0.5 rounded cursor-pointer hover:bg-white/10"
-                      value={sector}
-                      ref={(el) => autoResize(el)}
-                      onInput={(e) => autoResize(e.currentTarget)}
-                      onChange={(e) => {
-                        setSector(e.target.value);
-                        autoResize(e.target);
-                      }}
-                    />
-                  </div>
-                  {clientName && (
-                    <div className="mt-4 flex flex-col items-center justify-center space-y-3">
-                      {clientLogo && (
-                        <div className="bg-white p-2.5 rounded-lg shadow-sm border border-indigo-200">
-                          <img src={clientLogo} alt={clientName} className="h-10 object-contain" />
-                        </div>
-                      )}
-                      <p className="text-xs text-indigo-200 font-bold uppercase tracking-wider">
-                        {clientName}
-                      </p>
+                {/* Visual Header Banner mimicking corporate template */}
+                <div className="bg-white -mx-6 sm:-mx-8 -mt-6 sm:-mt-8 p-6 sm:p-8 flex flex-col mb-8 border-b-[6px] border-[#6e3c95] text-slate-800">
+                  <div className="flex justify-start items-center w-full">
+                    <div className="h-24 sm:h-28 flex items-center justify-start">
+                      <img 
+                        src={clientLogo || logoCurveImg} 
+                        alt="Logo" 
+                        className="h-24 sm:h-28 w-auto object-contain" 
+                      />
                     </div>
-                  )}
-                  <div className="w-16 h-0.5 bg-indigo-500 mx-auto my-3"></div>
-                  <div className="flex justify-center">
-                    <input
-                      type="text"
-                      className="bg-transparent text-[10px] text-slate-350 font-medium text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 border-none w-48 px-1 py-0.5 rounded cursor-pointer hover:bg-white/10"
-                      value={briefingDate}
-                      onChange={(e) => setBriefingDate(e.target.value)}
-                    />
                   </div>
                 </div>
 
@@ -2013,149 +2487,42 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                     />
                   </div>
                 )}
-
                 {/* Curated Headlines List */}
-                <div>
-                  <h4 className="text-[11px] font-bold text-indigo-650 uppercase tracking-widest mb-2">
-                    {sector === '10xDS CURVE' ? 'Current Solutions' : 'Curated Industry Bulletins'}
-                  </h4>
-                  <div className="relative w-full h-[1px] bg-slate-200/85 mb-4 flex items-center">
-                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#8B5CF6]"></div>
-                  </div>
-                  
-                  <div className="space-y-6">
+                <div className="space-y-8">
                     {result.news_items.map((item, idx) => (
                       <div
                         key={idx}
-                        className="flex gap-5 pb-6 border-b border-slate-100 last:border-b-0 last:pb-0"
+                        className="pb-6 border-b border-slate-100 last:border-b-0 last:pb-0 space-y-4 group/item relative"
                       >
-                        {/* Image Panel */}
-                        <div
-                          className={`flex-shrink-0 w-44 h-32 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 relative group transition-all duration-200 ${
-                            activeRepositioning === idx ? 'cursor-move ring-4 ring-indigo-500 ring-offset-2 ring-offset-white z-30 shadow-2xl' : ''
-                          }`}
-                          onMouseDown={activeRepositioning === idx ? (e) => handleRepositionStart(e, idx) : undefined}
-                          onTouchStart={activeRepositioning === idx ? (e) => handleRepositionStartTouch(e, idx) : undefined}
-                        >
-                          {item.image_url ? (
-                            <img
-                              src={item.image_url}
-                              alt={item.heading}
-                              className="w-full h-full object-cover select-none pointer-events-none"
-                              style={{ objectPosition: item.image_position || '50% 50%' }}
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-350 bg-slate-50">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-1 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              <span className="text-xs font-semibold text-slate-400">No Image</span>
-                            </div>
-                          )}
-
-                          {/* Loader spinner during regeneration */}
-                          {regeneratingImg === idx && (
-                            <div className="absolute inset-0 bg-slate-900/70 flex flex-col items-center justify-center text-white z-30">
-                              <RefreshCw className="h-6 w-6 animate-spin text-indigo-400 mb-1" />
-                              <span className="text-[10px] font-semibold">Generating...</span>
-                            </div>
-                          )}
-
-                          {/* Drag positioning banner inside container */}
-                          {activeRepositioning === idx && (
-                            <div className="absolute inset-0 bg-indigo-950/20 border-2 border-indigo-500 z-30 flex flex-col items-center justify-center pointer-events-none select-none">
-                              <div className="bg-indigo-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center space-x-1 backdrop-blur-sm text-center max-w-[90%]">
-                                <span>Drag to reposition</span>
-                              </div>
+                        {/* Headline Row (full-width above columns) */}
+                        <div className="w-full">
+                          {editingNewsHeading !== idx && item.source_link && item.hide_url_input ? (
+                            <div className="relative group/news-title flex items-center justify-between w-full p-1 rounded hover:bg-slate-100/50">
+                              <a
+                                href={ensureAbsoluteUrl(item.source_link)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-bold text-[#6e3c95] text-xl sm:text-2xl leading-snug hover:underline cursor-pointer block text-left"
+                              >
+                                {item.heading}
+                              </a>
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  setActiveRepositioning(null);
-                                }}
-                                className="absolute bottom-1 right-1 bg-indigo-650 hover:bg-indigo-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow pointer-events-auto cursor-pointer z-40 transition border border-indigo-400/30"
+                                onClick={() => setEditingNewsHeading(idx)}
+                                className="opacity-0 group-hover/news-title:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-indigo-900 transition cursor-pointer flex-shrink-0"
+                                title="Edit Headline Text"
                               >
-                                Done
+                                <Edit className="w-4 h-4" />
                               </button>
                             </div>
-                          )}
-
-                          {/* Actions Overlay (visible on hover) */}
-                          {activeRepositioning !== idx && (
-                            <div className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-20 space-y-1">
-                              <div className="flex space-x-1.5">
-                                {/* Upload local image */}
-                                <label className="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg cursor-pointer transition flex items-center justify-center" title="Upload local image">
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        handleImageUpload(idx, file);
-                                      }
-                                    }}
-                                  />
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                  </svg>
-                                </label>
-
-                                {/* Reposition button */}
-                                {item.image_url && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setActiveRepositioning(idx)}
-                                    className="p-1.5 bg-indigo-600 hover:bg-indigo-555 text-white rounded-lg transition flex items-center justify-center"
-                                    title="Reposition/Crop Image"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h-4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
-                                    </svg>
-                                  </button>
-                                )}
-
-                                {/* Regenerate image */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRegenerateImage(idx, item.heading, item.description)}
-                                  className="p-1.5 bg-indigo-650 hover:bg-indigo-500 text-white rounded-lg transition flex items-center justify-center font-medium"
-                                  title="Regenerate with AI"
-                                >
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                </button>
-
-                                {/* Delete image */}
-                                {item.image_url && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteImage(idx)}
-                                    className="p-1.5 bg-red-650 hover:bg-red-500 text-white rounded-lg transition flex items-center justify-center"
-                                    title="Remove image"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                              <div className="text-center select-none px-1">
-                                <span className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block">Adjust</span>
-                                <span className="text-[7.5px] text-indigo-300 font-medium tracking-wide block mt-0.5">Rec: 4:3, under 2MB</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Text Content */}
-                        <div className="flex-1 min-w-0 flex flex-col justify-between">
-                          <div>
+                          ) : (
                             <textarea
-                              className="auto-resize w-full font-bold text-slate-900 text-sm leading-snug hover:text-indigo-600 transition bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 py-0.5 rounded"
+                              className="auto-resize w-full font-bold text-[#6e3c95] text-xl sm:text-2xl leading-snug hover:text-indigo-850 transition bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 py-0.5 rounded cursor-pointer hover:bg-slate-100"
                               rows={1}
                               value={item.heading}
                               ref={(el) => autoResize(el)}
                               onInput={(e) => autoResize(e.currentTarget)}
+                              onBlur={() => setEditingNewsHeading(null)}
                               onChange={(e) => {
                                 const newItems = [...result.news_items];
                                 newItems[idx] = { ...newItems[idx], heading: e.target.value };
@@ -2163,8 +2530,133 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                 autoResize(e.target);
                               }}
                             />
+                          )}
+                        </div>
+
+                        {/* Image + Description columns */}
+                        <div className="flex flex-col sm:flex-row gap-5 items-start">
+                          {/* Image Panel */}
+                          <div
+                            className={`flex-shrink-0 w-44 h-44 overflow-hidden bg-slate-100 border border-slate-200 relative group transition-all duration-200 ${
+                              activeRepositioning === idx ? 'cursor-move ring-4 ring-indigo-500 ring-offset-2 ring-offset-white z-30 shadow-2xl' : ''
+                            }`}
+                            onMouseDown={activeRepositioning === idx ? (e) => handleRepositionStart(e, idx) : undefined}
+                            onTouchStart={activeRepositioning === idx ? (e) => handleRepositionStartTouch(e, idx) : undefined}
+                          >
+                            {item.image_url ? (
+                              <img
+                                src={item.image_url}
+                                alt={item.heading}
+                                className="w-full h-full object-cover select-none pointer-events-none"
+                                style={{ objectPosition: item.image_position || '50% 50%' }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-350 bg-slate-50">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mb-1 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-xs font-semibold text-slate-400">No Image</span>
+                              </div>
+                            )}
+
+                            {/* Loader spinner during regeneration */}
+                            {regeneratingImg === idx && (
+                              <div className="absolute inset-0 bg-slate-900/70 flex flex-col items-center justify-center text-white z-30">
+                                <RefreshCw className="h-6 w-6 animate-spin text-indigo-400 mb-1" />
+                                <span className="text-[10px] font-semibold">Generating...</span>
+                              </div>
+                            )}
+
+                            {/* Drag positioning banner inside container */}
+                            {activeRepositioning === idx && (
+                              <div className="absolute inset-0 bg-indigo-950/20 border-2 border-indigo-500 z-30 flex flex-col items-center justify-center pointer-events-none select-none">
+                                <div className="bg-indigo-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center space-x-1 backdrop-blur-sm text-center max-w-[90%]">
+                                  <span>Drag to reposition</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    setActiveRepositioning(null);
+                                  }}
+                                  className="absolute bottom-1 right-1 bg-indigo-650 hover:bg-indigo-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow pointer-events-auto cursor-pointer z-40 transition border border-indigo-400/30"
+                                >
+                                  Done
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Actions Overlay (visible on hover) */}
+                            {activeRepositioning !== idx && (
+                              <div className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200 z-20 space-y-1">
+                                <div className="flex space-x-1.5">
+                                  {/* Upload local image */}
+                                  <label className="p-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg cursor-pointer transition flex items-center justify-center" title="Upload local image">
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleImageUpload(idx, file);
+                                        }
+                                      }}
+                                    />
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                  </label>
+
+                                  {/* Reposition button */}
+                                  {item.image_url && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveRepositioning(idx)}
+                                      className="p-1.5 bg-indigo-600 hover:bg-indigo-555 text-white rounded-lg transition flex items-center justify-center"
+                                      title="Reposition/Crop Image"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h-4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                                      </svg>
+                                    </button>
+                                  )}
+
+                                  {/* Regenerate image */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRegenerateImage(idx, item.heading, item.description)}
+                                    className="p-1.5 bg-indigo-650 hover:bg-indigo-500 text-white rounded-lg transition flex items-center justify-center font-medium"
+                                    title="Regenerate with AI"
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                  </button>
+
+                                  {/* Delete image */}
+                                  {item.image_url && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteImage(idx)}
+                                      className="p-1.5 bg-red-650 hover:bg-red-500 text-white rounded-lg transition flex items-center justify-center"
+                                      title="Remove image"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-center select-none px-1">
+                                  <span className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block">Adjust</span>
+                                  <span className="text-[7.5px] text-indigo-300 font-medium tracking-wide block mt-0.5">Rec: 1:1, under 2MB</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Text Content */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-between self-stretch">
                             <textarea
-                              className="auto-resize w-full text-slate-600 text-xs mt-2 leading-relaxed bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 rounded"
+                              className="auto-resize w-full text-slate-750 text-sm leading-relaxed bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 rounded cursor-text hover:bg-slate-100"
                               rows={1}
                               value={item.description}
                               ref={(el) => autoResize(el)}
@@ -2176,58 +2668,382 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                 autoResize(e.target);
                               }}
                             />
-                          </div>
 
-                          <div className="mt-3 flex items-center justify-between">
-                            {!item.hide_resource && (
-                              <span className="inline-flex items-center text-[10px] text-slate-450 font-bold uppercase tracking-wider bg-slate-50 border border-slate-100 px-2.5 py-0.5 rounded-full space-x-1.5 hover:bg-slate-100/60 transition">
-                                {item.source_link ? (
-                                  <span>{extractDomain(item.source_link)}</span>
-                                ) : (
+                            <div className="mt-4 flex flex-col w-full">
+                              {/* Web Editor URL Input (Only visible in editor, hidden in print/final email) */}
+                              {!item.hide_url_input ? (
+                                <div className="mb-4 w-full print:hidden">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Webpage URL (Visit Webpage & Share Icons)</label>
+                                    {item.source_link && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newItems = [...result.news_items];
+                                          newItems[idx] = { ...newItems[idx], hide_url_input: true };
+                                          setResult({ ...result, news_items: newItems });
+                                        }}
+                                        className="text-[10px] text-emerald-500 font-bold hover:text-emerald-600 transition flex items-center gap-1 focus:outline-none"
+                                      >
+                                        Save & Hide Input
+                                      </button>
+                                    )}
+                                  </div>
                                   <input
                                     type="text"
-                                    className="bg-transparent border-none text-[10px] text-slate-450 font-bold uppercase tracking-wider w-24 p-0 focus:outline-none focus:ring-0 cursor-text"
-                                    value={item.source_resource !== undefined ? item.source_resource : 'Doc Resource'}
+                                    className="w-full bg-slate-50 border border-slate-200 hover:bg-slate-100/50 text-xs px-3 py-2 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                    placeholder="Enter article URL to show Visit Webpage and social share buttons..."
+                                    value={item.source_link || ''}
                                     onChange={(e) => {
                                       const newItems = [...result.news_items];
-                                      newItems[idx] = { ...newItems[idx], source_resource: e.target.value };
+                                      newItems[idx] = { ...newItems[idx], source_link: e.target.value };
                                       setResult({ ...result, news_items: newItems });
                                     }}
-                                    placeholder="Doc Resource"
-                                    title="Click to edit resource label"
                                   />
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newItems = [...result.news_items];
-                                    newItems[idx] = { ...newItems[idx], hide_resource: true };
-                                    setResult({ ...result, news_items: newItems });
-                                  }}
-                                  className="text-slate-400 hover:text-red-500 font-bold hover:bg-slate-200/50 rounded-full w-3.5 h-3.5 inline-flex items-center justify-center focus:outline-none leading-none pb-0.5"
-                                  title="Delete label"
-                                >
-                                  &times;
-                                </button>
-                              </span>
-                            )}
-                            {item.source_link && (
-                              <a
-                                href={item.source_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center text-xs text-indigo-600 hover:text-indigo-800 font-semibold space-x-0.5 print:hidden border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition"
-                              >
-                                <span>Know more</span>
-                                <ExternalLink className="h-3 w-3 shrink-0 ml-0.5" />
-                              </a>
-                            )}
+                                  <div className="mt-2">
+                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Button Label (Optional)</label>
+                                    <input
+                                      type="text"
+                                      className="w-full bg-slate-50 border border-slate-205 hover:bg-slate-100/50 text-[10px] px-2.5 py-1.5 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                      placeholder="Default: Visit Webpage"
+                                      value={item.button_text || ''}
+                                      onChange={(e) => {
+                                        const newItems = [...result.news_items];
+                                        newItems[idx] = { ...newItems[idx], button_text: e.target.value };
+                                        setResult({ ...result, news_items: newItems });
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mb-2 w-full flex justify-end print:hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newItems = [...result.news_items];
+                                      newItems[idx] = { ...newItems[idx], hide_url_input: false };
+                                      setResult({ ...result, news_items: newItems });
+                                    }}
+                                    className="opacity-0 group-hover/item:opacity-100 transition-all duration-200 text-[10px] text-slate-450 hover:text-indigo-600 font-semibold flex items-center gap-1 focus:outline-none bg-slate-50 border border-slate-200 px-2 py-1 rounded-md shadow-sm cursor-pointer"
+                                  >
+                                    <Settings className="w-3.5 h-3.5" /> Edit Link
+                                  </button>
+                                </div>
+                              )}
+
+                              <div className="flex flex-row justify-between items-end w-full">
+                                <div className="flex flex-col items-start gap-3">
+                                  {!item.hide_resource && (
+                                    <span className="inline-flex items-center text-[10px] text-slate-450 font-bold uppercase tracking-wider bg-slate-50 border border-slate-100 px-2.5 py-0.5 rounded-full space-x-1.5 hover:bg-slate-100/60 transition">
+                                      <span>{extractDomain(item.source_link || 'https://10xds.com')}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newItems = [...result.news_items];
+                                          newItems[idx] = { ...newItems[idx], hide_resource: true };
+                                          setResult({ ...result, news_items: newItems });
+                                        }}
+                                        className="text-slate-400 hover:text-red-500 font-bold hover:bg-slate-200/50 rounded-full w-3.5 h-3.5 inline-flex items-center justify-center focus:outline-none leading-none pb-0.5"
+                                        title="Delete label"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  )}
+                                  <a
+                                    href={item.source_link || 'https://10xds.com'}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center text-xs text-white bg-[#6e3c95] font-semibold border border-transparent px-6 py-2.5 rounded-xl hover:bg-indigo-900 transition shadow cursor-pointer print:hidden"
+                                    style={{ width: '156px', height: '40px' }}
+                                  >
+                                    <span>{item.button_text || 'Visit Webpage'}</span>
+                                  </a>
+                                </div>
+
+                                {/* Dynamic Social Sharing Icons */}
+                                <div className="flex items-center gap-4 pr-4 print:hidden">
+                                  <a
+                                    href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.source_link || 'https://10xds.com')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex flex-col items-center justify-center cursor-pointer select-none no-underline hover:opacity-80 transition"
+                                  >
+                                    <img src={FACEBOOK_ICON_BASE64} alt="Facebook" className="w-8 h-8 rounded-full shadow" />
+                                    <span className="text-[10px] text-[#2d68c4] font-bold mt-1">Facebook</span>
+                                  </a>
+                                  <a
+                                    href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(item.source_link || 'https://10xds.com')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex flex-col items-center justify-center cursor-pointer select-none no-underline hover:opacity-80 transition"
+                                  >
+                                    <img src={LINKEDIN_ICON_BASE64} alt="LinkedIn" className="w-8 h-8 rounded-full shadow" />
+                                    <span className="text-[10px] text-[#2d68c4] font-bold mt-1">LinkedIn</span>
+                                  </a>
+                                  <a
+                                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(item.source_link || 'https://10xds.com')}&text=${encodeURIComponent(item.heading)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex flex-col items-center justify-center cursor-pointer select-none no-underline hover:opacity-80 transition"
+                                  >
+                                    <img src={TWITTER_ICON_BASE64} alt="Twitter" className="w-8 h-8 rounded-full shadow" />
+                                    <span className="text-[10px] text-[#2d68c4] font-bold mt-1">Twitter</span>
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+
+                  {/* From our Blogs Section */}
+                  {result.blog_items && (
+                    <div className="mt-12 border-t border-slate-100 pt-10">
+                      <div className="text-center mb-8">
+                        <textarea
+                          className="auto-resize w-full text-center font-bold text-[#6e3c95] text-2xl tracking-tight bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 py-0.5 rounded cursor-pointer hover:bg-slate-50"
+                          rows={1}
+                          value={result.blog_title || "From our Blogs"}
+                          ref={(el) => autoResize(el)}
+                          onInput={(e) => autoResize(e.currentTarget)}
+                          onChange={(e) => {
+                            setResult({ ...result, blog_title: e.target.value });
+                            autoResize(e.target);
+                          }}
+                        />
+                        <div className="relative w-24 h-[2px] bg-[#6e3c95]/20 mx-auto mt-2">
+                          <div className="absolute left-1/2 -translate-x-1/2 -top-[2px] w-2.5 h-2.5 rounded-full bg-[#6e3c95]"></div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {result.blog_items.map((item, idx) => (
+                          <div key={idx} className="flex flex-col space-y-4 group/blog-card transition-all duration-200 h-full">
+                            {/* Image Container */}
+                            <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 border-[2.5px] border-black shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
+                              {item.image_url ? (
+                                <>
+                                  <a href={item.link_url ? ensureAbsoluteUrl(item.link_url) : undefined} target="_blank" rel="noopener noreferrer" className={item.link_url ? "block w-full h-full cursor-pointer" : "block w-full h-full cursor-default"}>
+                                    <img
+                                      src={item.image_url}
+                                      alt={item.heading}
+                                      className="w-full h-full object-cover select-none"
+                                    />
+                                  </a>
+                                  {item.is_ai_generated && (
+                                    <div className="absolute bottom-[18px] right-[18px] bg-white px-2 py-1 pointer-events-none select-none z-10 flex items-center justify-center rounded-none shadow-sm">
+                                      <img src={logo} alt="10xDS Logo" className="h-[15px] w-auto object-contain rounded-none" />
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-slate-350 bg-slate-50/50">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-2 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <span className="text-xs font-semibold text-slate-400">Upload or Generate Image</span>
+                                </div>
+                              )}
+
+                              {/* Loading spinner during generation */}
+                              {generatingBlogIdx === idx && (
+                                <div className="absolute inset-0 bg-slate-900/70 flex flex-col items-center justify-center text-white z-30">
+                                  <RefreshCw className="h-7 w-7 animate-spin text-indigo-400 mb-2" />
+                                  <span className="text-xs font-semibold">Generating Image...</span>
+                                </div>
+                              )}
+
+                              {/* Actions Overlay (visible on hover) */}
+                              {generatingBlogIdx !== idx && (
+                                <div className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center opacity-0 group-hover/blog-card:opacity-100 transition duration-200 z-20 space-y-2">
+                                  <div className="flex space-x-2">
+                                    {/* Upload local image */}
+                                    <label className="p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg cursor-pointer transition flex items-center justify-center" title="Upload local image">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            handleBlogImageUpload(idx, file);
+                                          }
+                                        }}
+                                      />
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                      </svg>
+                                    </label>
+
+                                    {/* Regenerate image via AI */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleGenerateBlogImage(idx, item.heading)}
+                                      className="p-2 bg-[#6e3c95] hover:bg-indigo-900 text-white rounded-lg transition flex items-center justify-center font-medium animate-pulse"
+                                      title="Generate brand-aligned image with Gemini"
+                                    >
+                                      <RefreshCw className="h-4 w-4" />
+                                    </button>
+
+                                    {/* Delete image */}
+                                    {item.image_url && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteBlogImage(idx)}
+                                        className="p-2 bg-red-650 hover:bg-red-500 text-white rounded-lg transition flex items-center justify-center"
+                                        title="Remove image"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="text-center select-none px-1">
+                                    <span className="text-[10px] text-slate-300 font-bold uppercase tracking-wider block">Blog Image</span>
+                                    <span className="text-[8px] text-indigo-300 font-medium tracking-wide block mt-0.5">Gemini uses card title</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Headline Input below image */}
+                            <div className="w-full flex justify-center items-center min-h-[72px]">
+                              {editingBlogHeading !== idx && item.link_url && item.hide_url_input ? (
+                                <div className="relative group/blog-title flex items-center justify-center w-full p-1 rounded hover:bg-slate-100/50">
+                                  <a
+                                    href={ensureAbsoluteUrl(item.link_url)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-bold text-[#6e3c95] text-base text-center leading-snug hover:underline cursor-pointer block"
+                                  >
+                                    {item.heading}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingBlogHeading(idx)}
+                                    className="absolute right-0 opacity-0 group-hover/blog-title:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-indigo-900 transition cursor-pointer"
+                                    title="Edit Headline Text"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <textarea
+                                  className="auto-resize w-full font-bold text-[#6e3c95] text-base text-center leading-snug hover:bg-slate-100 transition bg-transparent resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-indigo-100 px-1 py-0.5 rounded cursor-pointer"
+                                  rows={1}
+                                  value={item.heading}
+                                  ref={(el) => autoResize(el)}
+                                  onInput={(e) => autoResize(e.currentTarget)}
+                                  onBlur={() => setEditingBlogHeading(null)}
+                                  onChange={(e) => {
+                                    if (result.blog_items) {
+                                      const newItems = [...result.blog_items];
+                                      newItems[idx] = { ...newItems[idx], heading: e.target.value };
+                                      setResult({ ...result, blog_items: newItems });
+                                      autoResize(e.target);
+                                    }
+                                  }}
+                                />
+                              )}
+                            </div>
+
+                            {/* Blog Item Link Input (Only visible in editor, hidden in print/final email) */}
+                            {!item.hide_url_input ? (
+                              <div className="mt-auto pt-2 w-full print:hidden">
+                                <div className="flex justify-between items-center mb-1">
+                                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Blog Link URL</label>
+                                  {item.link_url && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (result.blog_items) {
+                                          const newItems = [...result.blog_items];
+                                          newItems[idx] = { ...newItems[idx], hide_url_input: true };
+                                          setResult({ ...result, blog_items: newItems });
+                                        }
+                                      }}
+                                      className="text-[9px] text-emerald-500 font-bold hover:text-emerald-600 transition flex items-center gap-1 focus:outline-none"
+                                    >
+                                      Save & Hide
+                                    </button>
+                                  )}
+                                </div>
+                                <input
+                                  type="text"
+                                  className="w-full bg-slate-50 border border-slate-200 hover:bg-slate-100/50 text-[10px] px-2.5 py-1.5 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                  placeholder="Enter article URL (e.g. https://10xds.com/blog/article)..."
+                                  value={item.link_url || ''}
+                                  onChange={(e) => {
+                                    if (result.blog_items) {
+                                      const newItems = [...result.blog_items];
+                                      newItems[idx] = { ...newItems[idx], link_url: e.target.value };
+                                      setResult({ ...result, blog_items: newItems });
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="mt-auto pt-1 w-full flex justify-center print:hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (result.blog_items) {
+                                      const newItems = [...result.blog_items];
+                                      newItems[idx] = { ...newItems[idx], hide_url_input: false };
+                                      setResult({ ...result, blog_items: newItems });
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover/blog-card:opacity-100 transition-all duration-200 text-[9px] text-slate-500 hover:text-indigo-650 font-semibold flex items-center gap-1 focus:outline-none bg-slate-50 border border-slate-200 px-2 py-0.5 rounded shadow-sm cursor-pointer"
+                                >
+                                  <Settings className="w-3 h-3" /> Edit Link
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Follow for More Updates Social Footer */}
+                  <div className="mt-12 border-t-[3px] border-[#6e3c95] pt-8 pb-4 text-center">
+                    <h4 className="text-[14px] font-bold text-[#6e3c95] uppercase tracking-wider mb-4">Follow for More Updates</h4>
+                    
+                    {/* Social Icons Row */}
+                    <div className="flex justify-center items-center gap-6 mb-6">
+                      {/* Website */}
+                      <a href="https://10xds.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition flex flex-col items-center">
+                        <img src={WEBSITE_ICON_BASE64} alt="Website" className="w-10 h-10 rounded-full shadow-md" />
+                        <span className="text-[9px] text-[#6e3c95] font-bold mt-1">Website</span>
+                      </a>
+                      
+                      {/* Facebook */}
+                      <a href="https://www.facebook.com/10xDS/" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition flex flex-col items-center">
+                        <img src={FACEBOOK_ICON_BASE64} alt="Facebook" className="w-10 h-10 rounded-full shadow-md" />
+                        <span className="text-[9px] text-[#6e3c95] font-bold mt-1">Facebook</span>
+                      </a>
+
+                      {/* LinkedIn */}
+                      <a href="https://www.linkedin.com/company/exponential-digital-solutions" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition flex flex-col items-center">
+                        <img src={LINKEDIN_ICON_BASE64} alt="LinkedIn" className="w-10 h-10 rounded-full shadow-md" />
+                        <span className="text-[9px] text-[#6e3c95] font-bold mt-1">LinkedIn</span>
+                      </a>
+
+                      {/* Instagram */}
+                      <a href="https://www.instagram.com/10xds/" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition flex flex-col items-center">
+                        <img src={INSTAGRAM_ICON_BASE64} alt="Instagram" className="w-10 h-10 rounded-full shadow-md" />
+                        <span className="text-[9px] text-[#6e3c95] font-bold mt-1">Instagram</span>
+                      </a>
+                    </div>
+
+                    {/* Address & Copyright */}
+                    <div className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                      <p className="font-bold text-slate-700">Exponential Digital Solutions (10xDS)</p>
+                      <p>India | Bahrain | UAE</p>
+                    </div>
+                  </div>
 
                 {/* Print Footer */}
                 <div className="hidden print:block border-t border-slate-150 mt-12 pt-4 text-center text-[9px] text-slate-400">
