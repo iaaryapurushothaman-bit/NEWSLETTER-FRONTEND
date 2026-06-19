@@ -2496,7 +2496,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                             {result.wish.image_url && (
                               <button
                                 type="button"
-                                onClick={() => handleDownloadImage(result.wish.image_url, 'wish-image.png')}
+                                onClick={() => handleDownloadImage(result.wish?.image_url, 'wish-image.png')}
                                 className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center"
                                 title="Download Image"
                               >
