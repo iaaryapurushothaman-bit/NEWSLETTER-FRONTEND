@@ -797,6 +797,35 @@ export default function App() {
     window.addEventListener('touchend', handleTouchEnd);
   };
 
+  const handleDownloadImage = async (url: string | null | undefined, filename: string) => {
+    if (!url) return;
+    try {
+      if (url.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+      
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Failed to download image:", err);
+      window.open(url, '_blank');
+    }
+  };
+
   const handleSendEmail = async () => {
     if (!result) return;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1421,7 +1450,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                   <tbody>
                                     <tr>
                                       <td style="border-collapse:collapse;font-size:12px;font-family:Arial, Helvetica, sans-serif;border:0px;padding:0px;text-align: left; width: 100%;" width="100%">
-                                        <img alt="Logo" height="160" src="${clientLogo || LOGO_CURVE_BASE64}" style="vertical-align: middle; height: 160px; width: auto; max-width: 380px;" valign="middle">
+                                        <img alt="Logo" height="110" src="${clientLogo || LOGO_CURVE_BASE64}" style="vertical-align: middle; height: 110px; width: auto; max-width: 300px;" valign="middle">
                                       </td>
                                     </tr>
                                   </tbody>
@@ -2153,11 +2182,11 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                 {/* Visual Header Banner mimicking corporate template */}
                 <div className="bg-white -mx-6 sm:-mx-8 -mt-6 sm:-mt-8 p-6 sm:p-8 flex flex-col mb-8 border-b-[6px] border-[#6e3c95] text-slate-800">
                   <div className="flex justify-start items-center w-full">
-                    <div className="h-24 sm:h-28 flex items-center justify-start">
+                    <div className="h-16 sm:h-20 flex items-center justify-start">
                       <img 
                         src={clientLogo || logoCurveImg} 
                         alt="Logo" 
-                        className="h-24 sm:h-28 w-auto object-contain" 
+                        className="h-16 sm:h-20 w-auto object-contain" 
                       />
                     </div>
                   </div>
@@ -2288,6 +2317,18 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                           >
                             <RefreshCw className="h-4 w-4" />
                           </button>
+
+                          {/* Download image */}
+                          {result.editorial_image_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadImage(result.editorial_image_url, 'editorial-image.png')}
+                              className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center"
+                              title="Download Image"
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                          )}
 
                           {/* Delete image */}
                           {result.editorial_image_url && (
@@ -2450,6 +2491,18 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                             >
                               <RefreshCw className="h-4 w-4" />
                             </button>
+
+                            {/* Download image */}
+                            {result.wish.image_url && (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadImage(result.wish.image_url, 'wish-image.png')}
+                                className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center"
+                                title="Download Image"
+                              >
+                                <Download className="h-4 w-4" />
+                              </button>
+                            )}
 
                             {/* Delete image */}
                             {result.wish.image_url && (
@@ -2632,6 +2685,18 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                   >
                                     <RefreshCw className="h-3.5 w-3.5" />
                                   </button>
+
+                                  {/* Download image */}
+                                  {item.image_url && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadImage(item.image_url, `news-${idx}-image.png`)}
+                                      className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center"
+                                      title="Download Image"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
 
                                   {/* Delete image */}
                                   {item.image_url && (
@@ -2887,6 +2952,18 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                     >
                                       <RefreshCw className="h-4 w-4" />
                                     </button>
+
+                                    {/* Download image */}
+                                    {item.image_url && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDownloadImage(item.image_url, `blog-${idx}-image.png`)}
+                                        className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition flex items-center justify-center"
+                                        title="Download Image"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                      </button>
+                                    )}
 
                                     {/* Delete image */}
                                     {item.image_url && (
