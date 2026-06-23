@@ -1203,7 +1203,7 @@ ${item.source_link ? `\n[Read Article](${item.source_link})` : ''}
                                     <td align="left" style="border-collapse:collapse;border:0px;padding:0px;color:#ffffff;font-family:Arial;text-align:left;border-radius:13px;cursor:pointer;">
                                       <a align="center" href="${absoluteUrl || 'https://10xds.com'}" style="padding:0px 0px;background-color:#6e3c95;width:156px;height:40px;font-size:12pt;direction:ltr;font-family:Arial;color:#ffffff;cursor:pointer;text-decoration:none;border-radius:13px;border:0px solid #ffffff;border-collapse:separate;display:table;text-align:center;" target="_blank">
                                         <font style="color:#ffffff;display:table-cell;vertical-align:middle;">
-                                          \${item.button_text || 'Visit Webpage'}
+                                          ${item.button_text || 'Visit Webpage'}
                                         </font>
                                       </a>
                                     </td>
