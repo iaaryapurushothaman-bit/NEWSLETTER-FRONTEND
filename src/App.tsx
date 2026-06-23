@@ -932,6 +932,7 @@ export default function App() {
             clientName,
             clientLogo,
             newsCount,
+            briefingDate,
           }),
         });
       } else {
@@ -945,6 +946,7 @@ export default function App() {
             clientName,
             clientLogo,
             newsCount,
+            briefingDate,
           }),
         });
       }
